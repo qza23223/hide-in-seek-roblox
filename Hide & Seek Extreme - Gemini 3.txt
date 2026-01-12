@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hide and Seek Extreme - Browser Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #111; user-select: none; }
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+        #top-bar {
+            background: rgba(0,0,0,0.6); color: white; padding: 15px 30px; display: flex; justify-content: space-between; font-size: 28px; font-weight: 900;
+            text-shadow: 3px 3px 0 #000; font-family: sans-serif; border-bottom: 4px solid rgba(0,0,0,0.3);
+        }
+        #center-msg {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; color: white; text-shadow: 4px 4px 0 #000;
+            display: none; pointer-events: none; z-index: 10;
+        }
+        #center-msg h1 { font-size: 80px; margin: 0; color: #ffeb3b; -webkit-text-stroke: 2px #000; }
+        #center-msg p { font-size: 40px; margin: 10px 0; font-weight: bold; }
+        
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: auto; flex-direction: column; color: white; z-index: 20;
+        }
+        #start-btn {
+            padding: 25px 60px; font-size: 30px; background: #00b06f; border: none; color: white;
+            cursor: pointer; border-radius: 15px; border-bottom: 8px solid #008f5a;
+            font-weight: 900; text-transform: uppercase; margin-top: 30px; transition: transform 0.1s;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        #start-btn:hover { background: #00c980; margin-top: 28px; border-bottom: 10px solid #008f5a; transform: scale(1.05); }
+        #start-btn:active { margin-top: 38px; border-bottom: 0px; transform: scale(0.95); }
+        
+        .role-badge { padding: 5px 20px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); }
+        .role-hider { background: #2196F3; }
+        .role-seeker { background: #F44336; }
+        
+        #map-name { position: absolute; bottom: 20px; right: 20px; color: rgba(255,255,255,0.5); font-size: 20px; font-weight: bold; }
+        
+        /* COIN & SHOP UI */
+        #coin-container { display: flex; align-items: center; gap: 10px; color: #FFD700; }
+        #shop-hint { position: absolute; bottom: 20px; left: 20px; color: white; font-weight: bold; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        
+        #shop-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 600px; background: #222; border: 4px solid #fff; border-radius: 15px;
+            display: none; flex-direction: column; padding: 20px; color: white;
+            pointer-events: auto; z-index: 30; box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+        .shop-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #444; padding-bottom: 10px; }
+        .shop-items { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+        .shop-item { background: #333; padding: 15px; border-radius: 10px; text-align: center; cursor: pointer; border: 2px solid #444; transition: 0.2s; }
+        .shop-item:hover { background: #444; border-color: #FFD700; }
+        .shop-item h3 { margin: 5px 0; color: #FFD700; }
+        .shop-item p { font-size: 14px; color: #ccc; height: 40px; }
+        .buy-btn { background: #00b06f; border: none; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold; width: 100%; cursor: pointer; }
+        .buy-btn:disabled { background: #555; cursor: not-allowed; }
+        .owned { background: #2196F3 !important; cursor: default; }
+    </style>
+</head>
+<body>
+
+<!-- Three.js from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<div id="ui-layer">
+    <div id="top-bar">
+        <div id="timer">WAITING...</div>
+        <div id="coin-container">
+            <span style="font-size: 30px;">🪙</span> 
+            <span id="coin-count">0</span>
+        </div>
+        <div id="role-display" class="role-badge role-hider">SPECTATOR</div>
+        <div id="score">ALIVE: 0</div>
+    </div>
+    <div id="shop-hint">Press 'B' to Open Shop</div>
+    <div id="map-name">Map: Unknown</div>
+</div>
+
+<div id="center-msg">
+    <h1 id="msg-title">GAME OVER</h1>
+    <p id="msg-sub">Seeker Wins!</p>
+</div>
+
+<!-- SHOP MODAL -->
+<div id="shop-modal">
+    <div class="shop-header">
+        <h2 style="margin:0;">ITEM SHOP</h2>
+        <button onclick="toggleShop()" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">X</button>
+    </div>
+    <div class="shop-items">
+        <!-- Speed Coil -->
+        <div class="shop-item">
+            <div style="font-size:40px;">⚡</div>
+            <h3>Speed Coil</h3>
+            <p>Run 50% Faster!</p>
+            <button id="btn-speed" class="buy-btn" onclick="buyItem('speed', 5)">5 Coins</button>
+        </div>
+        <!-- Gravity Coil -->
+        <div class="shop-item">
+            <div style="font-size:40px;">🌀</div>
+            <h3>Gravity Coil</h3>
+            <p>Jump 2x Higher!</p>
+            <button id="btn-jump" class="buy-btn" onclick="buyItem('jump', 10)">10 Coins</button>
+        </div>
+        <!-- Ghost Potion -->
+        <div class="shop-item">
+            <div style="font-size:40px;">👻</div>
+            <h3>Ghost Potion</h3>
+            <p>Become Semi-Invisible</p>
+            <button id="btn-ghost" class="buy-btn" onclick="buyItem('ghost', 20)">20 Coins</button>
+        </div>
+    </div>
+</div>
+
+<div id="start-screen">
+    <h1 style="font-size: 80px; color: #00b06f; text-shadow: 6px 6px 0 #000; margin-bottom: 0; font-family: 'Arial Black', sans-serif;">HIDE & SEEK</h1>
+    <h2 style="font-size: 50px; margin-top: -10px; color: #fff; text-shadow: 3px 3px 0 #000;">EXTREME</h2>
+    <div style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 10px; text-align: center;">
+        <p style="margin: 5px; font-size: 20px;">🎮 <b>WASD</b> to Move | <b>SPACE</b> to Jump</p>
+        <p style="margin: 5px; font-size: 20px;">🖱️ <b>MOUSE</b> to Look | <b>B</b> for Shop</p>
+        <p style="margin: 5px; font-size: 18px; color: #ccc;">New: Golden Coins & Item Shop!</p>
+    </div>
+    <button id="start-btn">PLAY ROUND</button>
+</div>
+
+<script>
+/**
+ * HIDE AND SEEK EXTREME - UPDATED
+ */
+
+// --- 1. UTILITIES & TEXTURE GENERATION ---
+
+function createTexture(colorHex, type = 'stud') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    ctx.fillStyle = colorHex;
+    ctx.fillRect(0, 0, 128, 128);
+    
+    if (type === 'stud') {
+        // Border
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0,0,128,128);
+        // Stud
+        const grd = ctx.createRadialGradient(64, 64, 10, 64, 64, 40);
+        grd.addColorStop(0, 'rgba(255,255,255,0.3)');
+        grd.addColorStop(1, 'rgba(0,0,0,0.1)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(64, 64, 32, 0, 2 * Math.PI);
+        ctx.fill();
+    } else if (type === 'wood') {
+        ctx.fillStyle = '#654321';
+        for(let i=0; i<60; i++) {
+            const x = Math.random() * 128;
+            const w = 2 + Math.random() * 8;
+            ctx.globalAlpha = 0.2;
+            ctx.fillRect(x, 0, w, 128);
+        }
+    } else if (type === 'tile') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0,0,128,128);
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(10,10,50,50); // Reflection hint
+    } else if (type === 'grass') {
+        ctx.fillStyle = '#2e7d32'; // Base dark green
+        ctx.fillRect(0,0,128,128);
+        for(let i=0; i<400; i++) {
+            const x = Math.random() * 128;
+            const y = Math.random() * 128;
+            ctx.fillStyle = Math.random() > 0.5 ? '#4caf50' : '#1b5e20';
+            ctx.globalAlpha = 0.8;
+            ctx.fillRect(x, y, 3, 3);
+        }
+    } else if (type === 'gold') {
+        // Gold Coin Texture
+        const grd = ctx.createLinearGradient(0,0,128,128);
+        grd.addColorStop(0, '#FFD700');
+        grd.addColorStop(0.5, '#FFFACD');
+        grd.addColorStop(1, '#DAA520');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0,0,128,128);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = 'bold 80px Arial';
+        ctx.fillText('$', 40, 90);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.NearestFilter;
+    return tex;
+}
+
+const textures = {
+    studRed: createTexture('#D32F2F', 'stud'),
+    studBlue: createTexture('#1976D2', 'stud'),
+    studGrey: createTexture('#9E9E9E', 'stud'),
+    studYellow: createTexture('#FBC02D', 'stud'),
+    wood: createTexture('#8B4513', 'wood'),
+    tileWhite: createTexture('#ECEFF1', 'tile'),
+    grass: createTexture('#4CAF50', 'grass'),
+    metal: createTexture('#546E7A', 'stud'),
+    gold: createTexture('#FFD700', 'gold')
+};
+
+// --- 2. GAME ENGINE SETUP ---
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.Fog(0x87CEEB, 200, 1500);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.5, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+dirLight.position.set(300, 500, 200);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 4096;
+dirLight.shadow.mapSize.height = 4096;
+dirLight.shadow.camera.near = 0.5;
+dirLight.shadow.camera.far = 1500;
+dirLight.shadow.camera.left = -500;
+dirLight.shadow.camera.right = 500;
+dirLight.shadow.camera.top = 500;
+dirLight.shadow.camera.bottom = -500;
+scene.add(dirLight);
+
+// --- 3. MAP GENERATION SYSTEM ---
+
+let worldOctree = []; 
+let mapMeshes = [];
+let coins = [];
+
+// Helper to clean up previous map
+function clearMap() {
+    mapMeshes.forEach(mesh => scene.remove(mesh));
+    mapMeshes = [];
+    worldOctree = [];
+    
+    // Clear coins
+    coins.forEach(c => scene.remove(c.mesh));
+    coins = [];
+}
+
+// Helper to create a static box
+function addStaticBox(x, y, z, w, h, d, color, texture = null, isClimbable = false, isBouncy = false) {
+    const geometry = new THREE.BoxGeometry(w, h, d);
+    let material;
+    
+    if (texture) {
+        texture.repeat.set(w/16, d/16); // Better tiling for roblox scale
+        if(h > w && h > d) texture.repeat.set(w/16, h/16); // Vertical tiling
+        material = new THREE.MeshStandardMaterial({ map: texture });
+    } else {
+        material = new THREE.MeshStandardMaterial({ color: color });
+    }
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y + h/2, z); 
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    mapMeshes.push(mesh);
+
+    const collider = {
+        box: new THREE.Box3().setFromObject(mesh),
+        isClimbable: isClimbable,
+        isBouncy: isBouncy
+    };
+    worldOctree.push(collider);
+    return mesh;
+}
+
+// Helper: Hollow Tunnel/Vent
+function addVent(x, y, z, length, width, height, axis) {
+    const wallThick = 2;
+    const color = '#607D8B';
+    const tex = textures.metal;
+
+    if (axis === 'x') {
+        addStaticBox(x, y, z, length, wallThick, width, color, tex);
+        addStaticBox(x, y + height, z, length, wallThick, width, color, tex);
+        addStaticBox(x, y, z - width/2, length, height, wallThick, color, tex);
+        addStaticBox(x, y, z + width/2, length, height, wallThick, color, tex);
+    } else {
+        addStaticBox(x, y, z, width, wallThick, length, color, tex);
+        addStaticBox(x, y + height, z, width, wallThick, length, color, tex);
+        addStaticBox(x - width/2, y, z, wallThick, height, length, color, tex);
+        addStaticBox(x + width/2, y, z, wallThick, height, length, color, tex);
+    }
+}
+
+// --- COIN SYSTEM ---
+class Coin {
+    constructor(x, y, z) {
+        const geo = new THREE.CylinderGeometry(3, 3, 0.5, 16);
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: 0xFFD700, 
+            map: textures.gold,
+            metalness: 0.8,
+            roughness: 0.2
+        });
+        this.mesh = new THREE.Mesh(geo, mat);
+        this.mesh.position.set(x, y, z);
+        this.mesh.rotation.x = Math.PI / 2;
+        this.mesh.castShadow = true;
+        scene.add(this.mesh);
+        
+        this.baseY = y;
+        this.timeOffset = Math.random() * 10;
+        this.active = true;
+    }
+
+    update(dt, playerPos) {
+        if (!this.active) return;
+
+        // Spin and Float
+        this.mesh.rotation.z += dt * 2;
+        this.mesh.position.y = this.baseY + Math.sin((Date.now() / 500) + this.timeOffset) * 1;
+
+        // Check Collision
+        if (playerPos.distanceTo(this.mesh.position) < 6) {
+            this.collect();
+        }
+    }
+
+    collect() {
+        this.active = false;
+        scene.remove(this.mesh);
+        addCoins(1);
+    }
+}
+
+function spawnCoins(count, rangeX, rangeZ) {
+    for(let i=0; i<count; i++) {
+        // Simple random spawning logic
+        // Ideally checking for collisions, but simple random + height offset works for this style
+        const x = (Math.random() - 0.5) * rangeX;
+        const z = (Math.random() - 0.5) * rangeZ;
+        const y = 8; // Default float height
+        const coin = new Coin(x, y, z);
+        coins.push(coin);
+    }
+}
+
+// --- MAP 1: GIANT HOUSE ---
+function buildHouseMap() {
+    document.getElementById('map-name').innerText = "Map: GIANT HOUSE";
+    scene.background = new THREE.Color(0x87CEEB);
+
+    addStaticBox(0, -2, 0, 400, 2, 400, '#5D4037', textures.wood); // Bedroom Floor
+    addStaticBox(0, -2, 400, 400, 2, 400, '#ffffff', textures.tileWhite); // Kitchen Floor
+
+    // Walls
+    addStaticBox(0, 0, -200, 400, 250, 10, '#E0E0E0'); 
+    addStaticBox(-200, 0, 0, 10, 250, 400, '#E0E0E0'); 
+    addStaticBox(200, 0, 0, 10, 250, 400, '#E0E0E0'); 
+    addStaticBox(-120, 0, 200, 160, 250, 10, '#E0E0E0'); 
+    addStaticBox(120, 0, 200, 160, 250, 10, '#E0E0E0'); 
+    addStaticBox(0, 80, 200, 80, 170, 10, '#E0E0E0'); 
+    addStaticBox(-200, 0, 400, 10, 250, 400, '#CFD8DC'); 
+    addStaticBox(200, 0, 400, 10, 250, 400, '#CFD8DC'); 
+    addStaticBox(0, 0, 600, 400, 250, 10, '#CFD8DC'); 
+
+    // Bedroom Furniture
+    addStaticBox(0, 0, -100, 200, 50, 180, '#388E3C'); 
+    addStaticBox(0, 50, -100, 190, 10, 170, '#FFFFFF'); 
+    addStaticBox(0, 60, -160, 120, 15, 40, '#FFCDD2'); 
+    addStaticBox(-90, 0, -50, 10, 60, 10, '#FF9800', textures.studGrey, true);
+    addStaticBox(120, 0, 50, 40, 40, 40, '#F44336', textures.studRed);
+    addStaticBox(150, 0, 80, 40, 60, 40, '#2196F3', textures.studBlue);
+
+    // Kitchen Furniture
+    addStaticBox(-100, 0, 350, 20, 120, 20, '#4E342E');
+    addStaticBox(100, 0, 350, 20, 120, 20, '#4E342E');
+    addStaticBox(-100, 0, 550, 20, 120, 20, '#4E342E');
+    addStaticBox(100, 0, 550, 20, 120, 20, '#4E342E');
+    addStaticBox(0, 120, 450, 260, 10, 260, '#795548', textures.wood);
+    addStaticBox(160, 0, 560, 70, 220, 70, '#ECEFF1'); // Fridge
+
+    // Vents
+    addVent(80, 0, -180, 40, 20, 20, 'z'); 
+    addVent(180, 0, 200, 20, 400, 20, 'z');
+    addStaticBox(180, 0, 560, 20, 220, 20, '#607D8B', textures.studGrey, true);
+
+    spawnCoins(20, 350, 550);
+}
+
+// --- MAP 2: OUTDOOR GARDEN ---
+function buildGardenMap() {
+    document.getElementById('map-name').innerText = "Map: THE BACKYARD";
+    scene.background = new THREE.Color(0x4FC3F7);
+
+    addStaticBox(0, -2, 0, 800, 2, 800, '#388E3C', textures.grass);
+
+    const fenceH = 150;
+    addStaticBox(0, 0, -400, 800, fenceH, 10, '#8D6E63', textures.wood);
+    addStaticBox(0, 0, 400, 800, fenceH, 10, '#8D6E63', textures.wood);
+    addStaticBox(-400, 0, 0, 10, fenceH, 800, '#8D6E63', textures.wood);
+    addStaticBox(400, 0, 0, 10, fenceH, 800, '#8D6E63', textures.wood);
+
+    addStaticBox(0, 0, 0, 60, 300, 60, '#5D4037', textures.wood, true); 
+    addStaticBox(0, 280, 0, 250, 80, 250, '#2E7D32', textures.grass);
+    addStaticBox(0, 340, 0, 150, 60, 150, '#388E3C', textures.grass);
+
+    addStaticBox(-200, 0, 200, 150, 10, 150, '#FBC02D', textures.studYellow); 
+    addStaticBox(-200, 0, 275, 170, 15, 10, '#8D6E63'); 
+    addStaticBox(-200, 0, 125, 170, 15, 10, '#8D6E63');
+    addStaticBox(-275, 0, 200, 10, 15, 160, '#8D6E63');
+    addStaticBox(-125, 0, 200, 10, 15, 160, '#8D6E63');
+
+    const bx = 200, bz = -200;
+    addStaticBox(bx, 60, bz, 160, 5, 80, '#A1887F', textures.wood);
+    addStaticBox(bx, 30, bz - 60, 160, 5, 20, '#A1887F', textures.wood);
+    addStaticBox(bx, 30, bz + 60, 160, 5, 20, '#A1887F', textures.wood);
+    addStaticBox(bx - 60, 0, bz, 10, 60, 100, '#5D4037');
+    addStaticBox(bx + 60, 0, bz, 10, 60, 100, '#5D4037');
+
+    addVent(0, 0, 0, 180, 25, 20, 'x');
+
+    spawnCoins(25, 750, 750);
+}
+
+function loadRandomMap() {
+    clearMap();
+    entities.forEach(e => {
+        e.position.set(0, 20, 0);
+        e.velocity.set(0,0,0);
+        e.isFrozen = false;
+        e.mesh.rotation.set(0,0,0);
+        e.tagCooldown = 0;
+    });
+
+    if (Math.random() > 0.5) {
+        buildHouseMap();
+    } else {
+        buildGardenMap();
+    }
+}
+
+// --- 4. PLAYER & ENTITIES ---
+
+const entities = [];
+const gravity = 100;
+
+// -- SHOP STATE --
+let playerCoins = 0;
+let unlockedItems = {
+    speed: false,
+    jump: false,
+    ghost: false
+};
+
+function addCoins(amount) {
+    playerCoins += amount;
+    document.getElementById('coin-count').innerText = playerCoins;
+    updateShopButtons();
+}
+
+function updateShopButtons() {
+    checkAffordability('btn-speed', 5, 'speed');
+    checkAffordability('btn-jump', 10, 'jump');
+    checkAffordability('btn-ghost', 20, 'ghost');
+}
+
+function checkAffordability(btnId, cost, itemKey) {
+    const btn = document.getElementById(btnId);
+    if (unlockedItems[itemKey]) {
+        btn.disabled = true;
+        btn.innerText = "OWNED";
+        btn.classList.add('owned');
+        return;
+    }
+    if (playerCoins >= cost) {
+        btn.disabled = false;
+        btn.innerText = "BUY (" + cost + ")";
+    } else {
+        btn.disabled = true;
+    }
+}
+
+function buyItem(item, cost) {
+    if (playerCoins >= cost && !unlockedItems[item]) {
+        playerCoins -= cost;
+        unlockedItems[item] = true;
+        document.getElementById('coin-count').innerText = playerCoins;
+        
+        // Apply immediate effects if needed
+        if (item === 'ghost') {
+            player.setGhostMode(true);
+        }
+        updateShopButtons();
+    }
+}
+
+function toggleShop() {
+    const modal = document.getElementById('shop-modal');
+    if (modal.style.display === 'flex') {
+        modal.style.display = 'none';
+        document.body.requestPointerLock();
+    } else {
+        modal.style.display = 'flex';
+        document.exitPointerLock();
+    }
+}
+
+// ENTITY CLASSES
+
+class Entity {
+    constructor(color, isBot = true) {
+        this.position = new THREE.Vector3(0, 20, 0);
+        this.velocity = new THREE.Vector3();
+        this.isBot = isBot;
+        this.role = 'hider'; 
+        this.tagCooldown = 0;
+        this.isFrozen = false;
+        this.isGhost = false; // Initial ghost state
+        this.speed = 50;
+
+        this.mesh = new THREE.Group();
+        
+        // Torso
+        const torsoGeo = new THREE.BoxGeometry(4, 5, 2);
+        const torsoMat = new THREE.MeshStandardMaterial({ color: color });
+        this.torso = new THREE.Mesh(torsoGeo, torsoMat);
+        this.torso.position.y = 3.5;
+        this.mesh.add(this.torso);
+
+        // Head
+        const headGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
+        const headMat = new THREE.MeshStandardMaterial({ color: '#FBC02D' }); 
+        this.head = new THREE.Mesh(headGeo, headMat);
+        this.head.position.y = 7.5;
+        this.mesh.add(this.head);
+
+        // Legs
+        const legGeo = new THREE.BoxGeometry(1.5, 3.5, 1.5);
+        const legMat = new THREE.MeshStandardMaterial({ color: '#333' });
+        this.legL = new THREE.Mesh(legGeo, legMat);
+        this.legL.position.set(-1, 1.75, 0);
+        this.legR = new THREE.Mesh(legGeo, legMat);
+        this.legR.position.set(1, 1.75, 0);
+        this.mesh.add(this.legL);
+        this.mesh.add(this.legR);
+
+        this.mesh.castShadow = true;
+        scene.add(this.mesh);
+
+        this.collider = new THREE.Box3();
+        this.collider.setFromCenterAndSize(this.position, new THREE.Vector3(3, 10, 3));
+        
+        this.walkCycle = 0;
+    }
+
+    update(dt) {
+        if (this.isFrozen) return;
+
+        this.velocity.y -= gravity * dt;
+        this.position.addScaledVector(this.velocity, dt);
+
+        this.isGrounded = false;
+        this.collider.setFromCenterAndSize(this.position, new THREE.Vector3(3, 10, 3));
+
+        for (const wall of worldOctree) {
+            if (this.collider.intersectsBox(wall.box)) {
+                const intersection = this.collider.clone().intersect(wall.box);
+                const size = new THREE.Vector3();
+                intersection.getSize(size);
+                const center = new THREE.Vector3();
+                intersection.getCenter(center);
+
+                if (size.y < size.x && size.y < size.z) {
+                    if (this.position.y > wall.box.max.y - 2) {
+                        this.position.y += size.y;
+                        this.velocity.y = 0;
+                        this.isGrounded = true;
+                        if (wall.isBouncy) {
+                            this.velocity.y = 90; 
+                            this.isGrounded = false;
+                        }
+                    } else {
+                        this.position.y -= size.y;
+                        this.velocity.y = 0;
+                    }
+                } else {
+                    if (wall.isClimbable) {
+                         this.velocity.y = 30; 
+                    } else {
+                        const dir = this.position.clone().sub(center).normalize();
+                        if(Math.abs(dir.x) > Math.abs(dir.z)) {
+                            this.position.x += (dir.x > 0 ? size.x : -size.x);
+                        } else {
+                            this.position.z += (dir.z > 0 ? size.z : -size.z);
+                        }
+                    }
+                }
+                this.collider.setFromCenterAndSize(this.position, new THREE.Vector3(3, 10, 3));
+            }
+        }
+        
+        if (this.position.y < -100) {
+            this.position.set(0, 30, 0); 
+            this.velocity.set(0,0,0);
+        }
+
+        this.mesh.position.copy(this.position);
+
+        const speed = new THREE.Vector2(this.velocity.x, this.velocity.z).length();
+        if (speed > 0.1) {
+            this.walkCycle += dt * 10;
+            this.legL.rotation.x = Math.sin(this.walkCycle) * 0.8;
+            this.legR.rotation.x = Math.cos(this.walkCycle) * 0.8;
+        } else {
+            this.legL.rotation.x = 0;
+            this.legR.rotation.x = 0;
+        }
+
+        if (this.role === 'seeker' && this.tagCooldown <= 0) {
+            for (let e of entities) {
+                // Modified Tag Logic: Ignore if isGhost is true
+                if (e !== this && e.role === 'hider' && !e.isFrozen && !e.isGhost) {
+                    if (this.position.distanceTo(e.position) < 8) {
+                        e.isFrozen = true;
+                        e.mesh.rotation.x = -Math.PI / 2;
+                        e.head.material.color.setHex(0x555555);
+                        showMessage("PLAYER TAGGED!", 1000);
+                        checkWin();
+                    }
+                }
+            }
+        }
+    }
+}
+
+class Bot extends Entity {
+    constructor(color) {
+        super(color, true);
+        this.timer = 0;
+        this.targetPos = new THREE.Vector3();
+    }
+
+    update(dt) {
+        super.update(dt);
+        if (this.isFrozen) return;
+
+        this.timer -= dt;
+        if (this.timer <= 0) {
+            this.timer = Math.random() * 3 + 1;
+            this.targetPos.set(
+                (Math.random() - 0.5) * 300,
+                this.position.y,
+                (Math.random() - 0.5) * 300
+            );
+        }
+
+        if (this.role === 'seeker') {
+             let closest = null;
+             let dist = 9999;
+             entities.forEach(e => {
+                 // Bot AI: Ignore invisible players
+                 if (e.role === 'hider' && !e.isFrozen && !e.isGhost) {
+                     const d = this.position.distanceTo(e.position);
+                     if (d < dist) { dist = d; closest = e; }
+                 }
+             });
+             if (closest) this.targetPos.copy(closest.position);
+        }
+
+        const dir = new THREE.Vector3().subVectors(this.targetPos, this.position);
+        dir.y = 0;
+        if (dir.length() > 2) {
+            dir.normalize();
+            const moveSpeed = this.role === 'seeker' ? this.speed * 1.1 : this.speed;
+            this.velocity.x = dir.x * moveSpeed;
+            this.velocity.z = dir.z * moveSpeed;
+            this.mesh.lookAt(this.targetPos.x, this.position.y, this.targetPos.z);
+        } else {
+            this.velocity.x = 0; this.velocity.z = 0;
+        }
+
+        if (this.isGrounded && Math.random() < 0.02) this.velocity.y = 40;
+    }
+}
+
+class PlayerController extends Entity {
+    constructor() {
+        super('#00E676', false);
+        this.yaw = 0;
+        this.pitch = 0;
+    }
+
+    setGhostMode(enabled) {
+        this.isGhost = enabled; // Update logical state
+        const opacity = enabled ? 0.2 : 1.0;
+        this.torso.material.transparent = enabled;
+        this.torso.material.opacity = opacity;
+        this.head.material.transparent = enabled;
+        this.head.material.opacity = opacity;
+        this.legL.material.transparent = enabled;
+        this.legL.material.opacity = opacity;
+        this.legR.material.transparent = enabled;
+        this.legR.material.opacity = opacity;
+    }
+
+    update(dt) {
+        if (this.isFrozen) return;
+
+        // Apply Shop Upgrades
+        let currentSpeed = this.role === 'seeker' ? 60 : 50;
+        if (unlockedItems.speed) currentSpeed *= 1.5;
+
+        const direction = new THREE.Vector3();
+        
+        if (keys['w']) direction.z -= 1;
+        if (keys['s']) direction.z += 1;
+        if (keys['a']) direction.x -= 1;
+        if (keys['d']) direction.x += 1;
+
+        direction.applyAxisAngle(new THREE.Vector3(0,1,0), this.yaw);
+        if (direction.length() > 0) direction.normalize();
+
+        this.velocity.x = direction.x * currentSpeed;
+        this.velocity.z = direction.z * currentSpeed;
+
+        if (keys[' '] && this.isGrounded) {
+            this.velocity.y = unlockedItems.jump ? 140 : 90; // Higher jump if coil bought
+            this.isGrounded = false;
+        }
+
+        super.update(dt);
+
+        // Check for Coins
+        coins.forEach(c => c.update(dt, this.position));
+
+        // Camera Follow
+        const camDist = 25;
+        const camHeight = 12;
+        const cx = this.position.x + camDist * Math.sin(this.yaw);
+        const cz = this.position.z + camDist * Math.cos(this.yaw);
+        
+        camera.position.lerp(new THREE.Vector3(cx, this.position.y + camHeight, cz), 0.2);
+        camera.lookAt(this.position.clone().add(new THREE.Vector3(0, 5, 0)));
+        this.mesh.rotation.y = this.yaw + Math.PI;
+    }
+}
+
+// --- 5. GAME LOGIC ---
+
+const keys = {};
+document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if (k === 'b') toggleShop(); // Shop hotkey
+});
+document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === document.body) {
+        player.yaw -= e.movementX * 0.002;
+        player.pitch -= e.movementY * 0.002;
+    }
+});
+
+let player;
+let gameState = 'LOBBY'; 
+let gameTime = 0;
+
+function initGame() {
+    entities.forEach(e => scene.remove(e.mesh));
+    entities.length = 0;
+
+    loadRandomMap();
+
+    player = new PlayerController();
+    // Re-apply unlocked visual effects if any
+    if (unlockedItems.ghost) player.setGhostMode(true);
+    entities.push(player);
+
+    const botColors = ['#F44336', '#9C27B0', '#FF9800', '#03A9F4'];
+    for(let i=0; i<4; i++) {
+        const bot = new Bot(botColors[i]);
+        bot.position.x = (Math.random()-0.5)*50;
+        bot.position.z = (Math.random()-0.5)*50;
+        entities.push(bot);
+    }
+
+    startGameLoop();
+}
+
+function showMessage(text, duration = 0) {
+    const msgDiv = document.getElementById('center-msg');
+    document.getElementById('msg-title').innerText = text;
+    document.getElementById('msg-sub').innerText = "";
+    msgDiv.style.display = 'block';
+    if (duration > 0) setTimeout(() => msgDiv.style.display = 'none', duration);
+}
+
+function startGameLoop() {
+    gameState = 'LOBBY';
+    gameTime = 5; 
+    
+    const loop = setInterval(() => {
+        if (gameState === 'LOBBY') {
+            gameTime -= 0.016;
+            document.getElementById('timer').innerText = "STARTING: " + Math.ceil(gameTime);
+            if (gameTime <= 0) startRound();
+        } else if (gameState === 'GAME') {
+            gameTime -= 0.016;
+            let mins = Math.floor(gameTime / 60);
+            let secs = Math.floor(gameTime % 60);
+            document.getElementById('timer').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            
+            if (gameTime <= 0) {
+                endGame("Hiders Win!");
+                clearInterval(loop);
+            }
+        }
+    }, 16);
+}
+
+function startRound() {
+    gameState = 'GAME';
+    gameTime = 120;
+    
+    const itIndex = Math.floor(Math.random() * entities.length);
+    entities.forEach((e, i) => {
+        e.role = (i === itIndex) ? 'seeker' : 'hider';
+        if (i === itIndex) {
+            e.head.material.color.setHex(0xFF0000); 
+            e.position.add(new THREE.Vector3(50, 0, 50)); 
+        }
+    });
+
+    const roleUI = document.getElementById('role-display');
+    if (player.role === 'seeker') {
+        roleUI.innerText = "YOU ARE IT!";
+        roleUI.className = "role-badge role-seeker";
+        showMessage("YOU ARE IT!", 2000);
+    } else {
+        roleUI.innerText = "HIDE!";
+        roleUI.className = "role-badge role-hider";
+        showMessage("RUN AND HIDE!", 2000);
+    }
+}
+
+function checkWin() {
+    if (gameState !== 'GAME') return;
+    const activeHiders = entities.filter(e => e.role === 'hider' && !e.isFrozen);
+    document.getElementById('score').innerText = "ALIVE: " + activeHiders.length;
+
+    if (activeHiders.length === 0) endGame("Seeker Wins!");
+    else if (player.role === 'hider' && player.isFrozen) showMessage("YOU WERE TAGGED!");
+}
+
+function endGame(reason) {
+    gameState = 'END';
+    document.getElementById('msg-title').innerText = "GAME OVER";
+    document.getElementById('msg-sub').innerText = reason;
+    document.getElementById('center-msg').style.display = 'block';
+    
+    setTimeout(() => {
+        document.exitPointerLock();
+        document.getElementById('start-screen').style.display = 'flex';
+        document.getElementById('center-msg').style.display = 'none';
+    }, 3000);
+}
+
+// --- 6. RENDER LOOP ---
+
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1); 
+
+    if (gameState !== 'END') {
+        entities.forEach(e => e.update(dt));
+    }
+
+    renderer.render(scene, camera);
+}
+
+document.getElementById('start-btn').addEventListener('click', () => {
+    document.getElementById('start-screen').style.display = 'none';
+    document.body.requestPointerLock();
+    initGame();
+});
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+
+</script>
+</body>
+</html>
